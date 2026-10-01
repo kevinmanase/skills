@@ -50,7 +50,7 @@ Lost? Read the checkpoint and resume from its node.
 
 ## Fleet (the graph around the graphs)
 - Sibling tickets run in parallel, one Herdr tab and Claude session each. Their briefs wait in `~/.cache/herdr-fleet/queue/`, and `herdr-orchestrator next` starts the next one in a fresh session: a `⚪ ready` tab, or a new tab when memory allows. A session that reaches END refills the pool, and leaves its chat open. Clearing needs Kevin's approval.
-- **The orchestrator** (👑, the Claude session named `orchestrator`; see the `herdr` skill) keeps the fleet's notes and the queue, and relays Kevin's decisions. It leaves finished sessions open and clears one only after Kevin explicitly approves that exact tab and session (see the `herdr` skill). Tell it when you merge, get blocked, or finish.
+- **The orchestrator** (👑, the Claude session named `orchestrator`; see the `herdr` skill) keeps the queue, tracks the fleet from ticket-graph checkpoints, Linear and GitHub rather than notes, and relays Kevin's decisions. It leaves finished sessions open and clears one only after Kevin explicitly approves that exact tab and session (see the `herdr` skill). Tell it when you merge, get blocked, or finish.
 - **Merge order is a DAG.** Hard edges in your brief ("after #3818") come first. Otherwise the first green PR goes first. When two PRs touch the same files, the smaller or more foundational one goes first.
 - **Coordinating:**
   - Find your siblings with `ListAgents`; their names are `eng-NNNN`.
