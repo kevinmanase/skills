@@ -1,0 +1,59 @@
+#!/usr/bin/env python3
+"""Ask Jev (TypeSafe's fast classifier) one yes/no routing question about a piece of text.
+
+Usage: jev "<question>" "<when true>" "<when false>" < text
+Prints the probability that the answer is true, then exits 0 for true (>= 0.5), 1 for false,
+and 2 when Jev isn't available: no key, or the call failed. Treat 2 as "decide yourself".
+The key comes from TYPESAFE_API_KEY or ~/.config/typesafe/api-key. Only the last 1,500
+characters of the text leave the machine, and nothing does without a key.
+"""
+import json
+import os
+import sys
+import urllib.request
+
+URL = "https://api.typesafe.ai/v1/systemone"
+KEY_FILE = os.path.expanduser("~/.config/typesafe/api-key")
+
+
+def main() -> int:
+    if len(sys.argv) != 4:
+        print(__doc__.strip(), file=sys.stderr)
+        return 2
+    question, when_true, when_false = sys.argv[1:]
+    key = os.environ.get("TYPESAFE_API_KEY")
+    if not key and os.path.exists(KEY_FILE):
+        with open(KEY_FILE, encoding="utf-8") as handle:
+            key = handle.read().strip()
+    if not key:
+        print("jev: no TypeSafe key; decide yourself", file=sys.stderr)
+        return 2
+    text = sys.stdin.read()[-1500:]
+    body = {
+        "state": text,
+        "model": "jev-latest",
+        "questions": {
+            "answer": {
+                "type": "noul",
+                "instructions": question,
+                "criteria": {"true": when_true, "false": when_false},
+            }
+        },
+    }
+    request = urllib.request.Request(
+        URL,
+        data=json.dumps(body).encode(),
+        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=10) as response:
+            probability = float(json.load(response)["answers"]["answer"]["noul"])
+    except Exception as error:  # a failed router call must never block the work
+        print(f"jev: unavailable ({error}); decide yourself", file=sys.stderr)
+        return 2
+    print(f"{probability:.2f}")
+    return 0 if probability >= 0.5 else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
