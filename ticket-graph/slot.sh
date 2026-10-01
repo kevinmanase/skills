@@ -3,11 +3,10 @@
 # Parallel ticket sessions share about 8 GB of RAM and a small /tmp, so at most N of them run
 # heavy work at once. The lock is a file descriptor, so it's released even if the command dies.
 # It uses the fixed fd 9, not `exec {fd}>`, because macOS ships bash 3.2.
-# Usage: ~/.claude/skills/ticket-graph/slot.sh <command> [args...]   (N: TICKET_GRAPH_SLOTS, default 1)
-# The default is 1 because finished chats now stay open (about 0.4 GB each) and the api typecheck
-# alone needs about 3 GB, so two heavy runs at once swap the box and get killed. Raise it when memory allows.
+# Usage: ~/.claude/skills/ticket-graph/slot.sh <command> [args...]   (N: TICKET_GRAPH_SLOTS, default 3)
+# The api typecheck alone needs about 3 GB, so set TICKET_GRAPH_SLOTS=1 on a small machine.
 set -u
-n=${TICKET_GRAPH_SLOTS:-1}
+n=${TICKET_GRAPH_SLOTS:-3}
 dir="$HOME/.cache/ticket-graph"
 mkdir -p "$dir"
 waited=0
