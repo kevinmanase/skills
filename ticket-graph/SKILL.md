@@ -13,7 +13,7 @@ Lost? Read the checkpoint and resume from its node.
 
 ## Checkpoint
 - **Where:** one JSON file per worktree, at `$(git rev-parse --git-path ticket-graph.json)`. Update it on every edge.
-- **Contents:** `{ticket, branch, node, pr, plan, counts: {verify_same_failure, ci_fix, greptile}, decisions: [], history: [{from, to, why}], blocked_on}`.
+- **Contents:** `{ticket, branch, node, pr, plan, counts: {verify_same_failure, ci_fix, greptile}, decisions: [], history: [{from, to, why}], blocked_on, blocked_by: [ticket ids]}`.
   - Log every edge in `history` with its reason. That trace is how you, and Kevin, see why the graph went where it did.
 - **Tab name:** mirror the node in the Herdr tab (`~/.claude/hooks/herdr-tab name "<emoji> eng-NNNN <gist>"`), so Kevin can see where every ticket stands.
 - **Every node must be safe to re-run**, because a resume replays the node it stopped in. Check before acting:
@@ -25,7 +25,7 @@ Lost? Read the checkpoint and resume from its node.
 
 | Node | Tab | Job | Edges |
 |---|---|---|---|
-| START | 🔍 | Read the ticket, its comments, related tickets, linked PRs, and the code and logs it names. Create the worktree with `git worktree add ../ampersand-eng-NNNN -b feature/eng-NNNN origin/staging` (Linear's `gitBranchName`), then run every command as `cd ../ampersand-eng-NNNN && …` or with `git -C`. **Don't use `EnterWorktree`:** its isolation blocks the checkpoint in the main repo's `.git/worktrees/` and refuses compound git commands. | clear → EXECUTE · unclear → CLARIFY |
+| START | 🔍 | Read the ticket, its comments, related tickets, linked PRs, and the code and logs it names. Create the worktree with `git worktree add ../ampersand-eng-NNNN -b feature/eng-NNNN origin/staging` (Linear's `gitBranchName`), then run every command as `cd ../ampersand-eng-NNNN && …` or with `git -C`. **Don't use `EnterWorktree`:** its isolation blocks the checkpoint in the main repo's `.git/worktrees/` and refuses compound git commands. Write the ticket's Linear "blocked by" relations, plus any hard edges in your brief, to `blocked_by`. | a blocker not yet merged or Done → WAITING · clear → EXECUTE · unclear → CLARIFY |
 | CLARIFY | 🔍 | Run the `grilling` skill. `/grill-me` only calls it, and the model can't invoke `/grill-me`. Post the answers as a `Decisions` comment on the ticket. | decided → EXECUTE · Kevin defers → PARKED |
 | EXECUTE | 🛠️ | Plan first: write 3–5 lines in the checkpoint's `plan`, covering the acceptance check, the files, and the test that will prove it. Then make the change. Write API and integration tests as you go (real handlers, real Postgres). Add unit tests only for pure logic worth pinning; don't pile them on. Use subagents only for independent exploration or pieces of work. | → VERIFY |
 | VERIFY | 🧪 | Typecheck, lint and test each touched package, one at a time, through `slot.sh`. Never delete, skip or weaken a test to get green. | green → COMMIT · red → EXECUTE · the same failure 3 times in a row → BLOCKED |
@@ -41,6 +41,7 @@ Lost? Read the checkpoint and resume from its node.
 | END | 🎉 | Enter only on evidence: `gh pr view <n> --json state` reads `MERGED`, or you came from PARKED with its reason written down. Linear closes the ticket through the branch name and `Fixes`. Run `~/.claude/hooks/herdr-orchestrator next` to start the next queued ticket in a fresh session (exit 3 means low memory; say so). Report to Kevin in a few lines, and SendMessage the same to `orchestrator` with any follow-ups you didn't do. Then stop, and **leave this chat open**. Clearing or closing needs Kevin's explicit approval of this exact tab and session (see the `herdr` skill). Never take the next ticket in this session: new work always gets a fresh one. | done |
 | PARKED | 💤 | Comment on the ticket why it stops here and what would restart it. | → END |
 | BLOCKED | 🚧 | Only Kevin can unblock this. Flag the tab (`herdr-tab ask "<question>"` or `request "<what he must do>"`), write `blocked_on` into the checkpoint, tell the orchestrator, and stop. | → the node you left, once he answers |
+| WAITING | 💤 | A blocker isn't merged yet. This isn't BLOCKED, so don't flag Kevin. Tell the orchestrator and each running blocker session (`eng-NNNN`) that you wait on it, then stop. On a sibling's post-merge note, recheck every blocker. | all merged → rebase on `origin/staging`, then START · still open → stop again |
 
 ## Routing rules (the two decision points)
 - **Clear enough to execute** means you can name the acceptance check and the files you'll change, and none of the decisions belong to Kevin. Kevin's decisions include deleting data, product behavior, spend, anything irreversible, and anything in production.
@@ -54,7 +55,7 @@ Lost? Read the checkpoint and resume from its node.
 - **Coordinating:**
   - Find your siblings with `ListAgents`; their names are `eng-NNNN`.
   - Message each one whose PR touches your files with your PR number, the files you changed, your hard edges and your proposed position. Wait for anyone ahead of you.
-  - After you merge, send a one-line note so they rebase.
+  - After you merge, send a one-line note so they rebase. Include any session WAITING on your ticket; the note is what wakes it.
   - If a sibling is silent for 30 minutes, say so in its ticket and carry on by the rules above.
 - **Shared resources:** run every heavy command through `~/.claude/skills/ticket-graph/slot.sh` (3 machine-wide slots). For Postgres integration tests, start your own server on a free port (`ss -ltn`), per the `local-postgres-integration-tests` memory.
 
@@ -75,6 +76,7 @@ Lost? Read the checkpoint and resume from its node.
 - **Gates are environment evidence,** not self-report. Never edit tests to pass [3][8].
 - **Cycles exist, but each is capped,** and a cap escalates to a human. The CI cap is 3 [1][6].
 - **Human interrupts are named nodes:** CLARIFY and BLOCKED. There's no plan-approval interrupt: Kevin chose "if it's clear, just execute" [7].
+- **Dependencies wait in their own tab.** A ticket with an open blocker parks in WAITING, an idle session (about 0.4 GB, no heavy work), rather than being skipped by `herdr-orchestrator next`. A queue skip would need the script to read Linear, and a skipped brief has no session for the post-merge note to wake; `next` already refuses to start one when memory is short.
 - **Fan-out covers independent tickets only,** bounded by memory. Merge order is a deterministic DAG, because coding has less truly parallel work than research [4].
 - **Terminal states need proof** (merged or parked), guarding against a premature "done" [5][7][8].
 - **Keep it thin.** Don't turn the agentic core into a flowchart; the graph only wraps it [1][3].
