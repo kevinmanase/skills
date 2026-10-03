@@ -4,8 +4,9 @@
 Usage: jev "<question>" "<when true>" "<when false>" < text
 Prints the probability that the answer is true, then exits 0 for true (>= 0.5), 1 for false,
 and 2 when Jev isn't available: no key, or the call failed. Treat 2 as "decide yourself".
-The key comes from TYPESAFE_API_KEY or ~/.config/typesafe/api-key. Only the last 1,500
-characters of the text leave the machine, and nothing does without a key.
+The key comes from TYPESAFE_API_KEY, jev.api_key in ~/.config/team-floor/config.json, or
+~/.config/typesafe/api-key. Only the last 1,500 characters of the text leave the machine, and
+nothing does without a key.
 """
 import json
 import os
@@ -13,7 +14,32 @@ import sys
 import urllib.request
 
 URL = "https://api.typesafe.ai/v1/systemone"
-KEY_FILE = os.path.expanduser("~/.config/typesafe/api-key")
+
+
+def typesafe_key():
+    """TYPESAFE_API_KEY, then jev.api_key in ~/.config/team-floor/config.json, then jev.api_key_file
+    (default ~/.config/typesafe/api-key). Same lookup as kevinmanase/herdr-customizations's hooks."""
+    key = os.environ.get("TYPESAFE_API_KEY", "").strip()
+    if key:
+        return key
+    try:
+        with open(os.path.expanduser("~/.config/team-floor/config.json"), encoding="utf-8") as handle:
+            jev = json.load(handle)["jev"]
+    except (OSError, ValueError, KeyError, TypeError):
+        jev = {}
+    if not isinstance(jev, dict):
+        jev = {}
+    key = jev.get("api_key")
+    if isinstance(key, str) and key.strip():
+        return key.strip()
+    key_file = jev.get("api_key_file")
+    if not isinstance(key_file, str) or not key_file:
+        key_file = "~/.config/typesafe/api-key"
+    try:
+        with open(os.path.expanduser(key_file), encoding="utf-8") as handle:
+            return handle.read().strip()
+    except OSError:
+        return ""
 
 
 def main() -> int:
@@ -21,10 +47,7 @@ def main() -> int:
         print(__doc__.strip(), file=sys.stderr)
         return 2
     question, when_true, when_false = sys.argv[1:]
-    key = os.environ.get("TYPESAFE_API_KEY")
-    if not key and os.path.exists(KEY_FILE):
-        with open(KEY_FILE, encoding="utf-8") as handle:
-            key = handle.read().strip()
+    key = typesafe_key()
     if not key:
         print("jev: no TypeSafe key; decide yourself", file=sys.stderr)
         return 2
